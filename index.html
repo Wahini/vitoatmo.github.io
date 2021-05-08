@@ -1,84 +1,174 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <meta name="viewport" content="width=device-width, height=device-height, user-scalable=no" />
-  <link href="https://fonts.googleapis.com/css?family=Roboto" rel="stylesheet" type="text/css" />
-  <link href="../resources/demo.css" rel="stylesheet" type="text/css" />
-  <script src="../components/polymer/polymer.js"></script><!-- down/up events -->
-  <script src="../components/web-animations-js/web-animations.min.js"></script>
-  <style>
-body {
-  overflow: hidden;
-  background: #2ebcfc;
-  will-change: transform;
-}
-div {
-  border-radius: 50%;
-  background: black;
-  width: 300px;
-  height: 300px;
-  position: absolute;
-  opacity: 0.66;
-  -webkit-user-select: none;
-  user-select: none;
-}
-  </style>
-</head>
-<body touch-action="none">
-<script>
-var waves = [];
-var duration = 450;
+{% extends 'base.html' %}
 
-function Wave(x, y) {
-  waves.push(this);
-  this.element = document.createElement('div');
-  this.element.style.left = 'calc(' + x + 'px - 150px)';
-  this.element.style.top = 'calc(' + y + 'px - 150px)';
-  this.element.setAttribute('touch-action', 'none');
-  this.element.addEventListener('up', up);
+{% block title %}
+Blockchain Frontend
+{% endblock %}
 
-  var hue = Math.random() * 360;
-  this.element.style.backgroundColor = 'hsl(' + hue + ', 85%, 67%)';
+{% block body %}
+<div class="container">
+    <div class="row">
+        <div class="col-lg-12 text-center">
+            <div class="card-body">
+                <h4 class="card-title">Transactions to be added to the next block</h4>
+                <button type="submit" id="refresh_transactions" class="btn btn-primary">
+                    <i class="fa fa-refresh"></i>
+                </button>
 
-  document.body.appendChild(this.element);
+            </div>
+        </div>
+    </div>
+</div>
 
-  this.scale = this.element.animate([
-    {transform: 'scale(0)'},
-    {transform: 'scale(1)'},
-  ], {
-    duration: duration,
-    easing: 'cubic-bezier(.22,.67,.52,.92)',
-    fill: 'forwards',
-  });
-}
+<div class="container">
+    <table id="unmined_transactions_table" class="table table-bordered" cellspacing="0" width="100%">
+    </table>
+    <div class="col-lg-12 text-center">
+        <input type="button" id="mine_button" class="btn btn-primary btn-lg" value="Mine">
+    </div>
+</div>
 
-Wave.prototype = {
-  up: function() {
-    this.up = function() {};
-    this.opacity = this.element.animate([
-      {opacity: 0.66},
-      {opacity: 0},
-    ], {
-      duration: duration,
-      fill: 'forwards',
-    });
-    this.opacity.onfinish = function() {
-      this.element.remove();
-      waves.splice(waves.indexOf(this), 1);
-    }.bind(this);
-  }
-};
+<div class="container">
+    <div class="row">
+        <div class="col-lg-12 text-center">
+            <div class="card-body">
+                <h4 class="card-title">Transactions on the blockchain</h4>
+                <button type="submit" id="refresh_blockchain" class="btn btn-primary">
+                    <i class="fa fa-refresh"></i>
+                </button>
 
-document.body.addEventListener('down', function(e) {
-  waves.forEach(function(wave) { wave.up(); });
-  new Wave(e.clientX, e.clientY);
-});
+            </div>
+        </div>
+    </div>
+</div>    
 
-function up() {
-  waves.forEach(function(wave) { wave.up(); });
-}
+<div class="container">
+    <table id="transactions_table" class="table table-bordered" cellspacing="0" width="100%">
+    </table>
+</div>    
+{% endblock %}
 
-document.body.addEventListener('up', up);
-</script>
-</body>
-</html>
+{% block script %}
+    <script>
+        $(function() {
+
+            $.ajax({
+                url: "/chain",
+                type: "GET",
+                success: function(response) {
+                    let transactions = []
+                    let count = 1
+
+                    for (i=0; i<response['length']; i++) {
+                        for (j=0; j<response['chain'][i]['transactions'].length; j++) {
+                            let options = {  year: "numeric", month: "short",  day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit"  };
+                            let date = new Date(response["chain"][i]["timestamp"] * 1000);
+                            formattedTimestamp = date.toLocaleTimeString('en-US', options);
+
+                            let transaction = [
+                                count,
+                                response['chain'][i]['transactions'][j]['sender_public_key'],
+                                response['chain'][i]['transactions'][j]['recipient_public_key'],
+                                response['chain'][i]['transactions'][j]['amount'],
+                                formattedTimestamp,
+                                response['chain'][i]['block_number']
+                            ]
+
+                            transactions.push(transaction);
+                            count += 1;
+                        }
+                    }
+
+                    $('#transactions_table').dataTable({
+                        data: transactions,
+                        columns: [
+                            {title: "#"},
+                            {title: "Sender Public Key"},
+                            {title: "Recipient Public Key"},
+                            {title: "Amount"},
+                            {title: "Timestamp"},
+                            {title: "Block#"},
+
+                        ],
+                        columnDefs: [{targets: [1,2,3,4,5], render: $.fn.dataTable.render.ellipsis(25)}]
+                    });
+                },
+                error: function(error) {
+                    console.log(error);
+                }
+            });
+
+
+
+            $.ajax({
+                url: "/transactions/get",
+                type: "GET",
+                success: function(response) {
+
+                    let transactions = []
+                    let count = 1
+
+                    for (i=0; i<response['transactions'].length; i++) {
+
+                        let transaction = [
+                            count,
+                            response['transactions'][i]['sender_public_key'],
+                            response['transactions'][i]['recipient_public_key'],
+                            response['transactions'][i]['amount'],
+                        ]
+
+                        transactions.push(transaction);
+
+                        count += 1;
+                    }
+
+                    $('#unmined_transactions_table').dataTable({
+                        data: transactions,
+                        columns: [
+                            {title: "#"},
+                            {title: "Sender Public Key"},
+                            {title: "Recipient Public Key"},
+                            {title: "Amount"},
+                        ],
+                        columnDefs: [{targets: [1,2,3], render: $.fn.dataTable.render.ellipsis(25)}]
+                    });
+                },
+                error: function(error) {
+                    console.log(error);
+                }
+            });
+
+            $('#mine_button').click(function() {
+                $.ajax({
+                    url: '/mine',
+                    type: 'GET',
+                    success: function(response) {
+                        window.location.reload();
+                    },
+                    error: function(error) {
+                        console.log(error);
+                    }
+
+                });
+            });
+
+            $('#refresh_transactions').click(function() {
+                window.location.reload();
+            });
+
+            $('#refresh_blockchain').click(function() {
+                $.ajax({
+                    url: '/nodes/resolve',
+                    type: 'GET',
+                    success: function(response) {
+                        window.location.reload();
+                    },
+                    error: function(error) {
+                        console.log(error);
+                    }
+                });
+            });
+
+        });
+
+    </script>
+{% endblock %}
